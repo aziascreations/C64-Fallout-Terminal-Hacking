@@ -12,8 +12,10 @@ ZP_UNK2 = $52
 ZP_UNK3 = $B0
 ZP_UNK4 = $B1
 ZP_UNK5 = $BF
+
 ZP_ADR_IN_LOW = $FB
 ZP_ADR_IN_HIGH = $FC
+
 ZP_ADR_OUT_LOW = $FD
 ZP_ADR_OUT_HIGH = $FE
 
@@ -23,8 +25,8 @@ ZP_ADR_OUT_HIGH = $FE
 SCR_FRAME = $D020 ; Frame color
 SCR_BKGND = $D021 ; Background color
 
-SCR_LINE1 = $0400 ; Start of first line of characters
-SCR_LINE2 = $0400 ; ...
+;SCR_LINE1 = $0400 ; Start of first line of characters
+;SCR_LINE2 = $0400 ; ...
 
 SCR_CURSOR_X = $D3 ;Current cursor column. Values: $00-$27, 0-39.
 SCR_CURSOR_Y = $D6 ;Current cursor row. Values: $00-$18, 0-24.
@@ -47,16 +49,16 @@ SPR_PTR7 = $07FF ; Sprite location pointer #7
 
 ;SPR_CLR0 = $xxxx ; Sprite #0 color
 
-; ---------------
-;  Controllers ?
-; ---------------
+; -------------
+;  Controllers
+; -------------
 PRA  = $DC00 ; CIA#1 (Port Register A)
 DDRA = $DC02 ; CIA#1 (Data Direction Register A)
 
 PRB  = $DC01 ; CIA#1 (Port Register B)
 DDRB = $DC03 ; CIA#1 (Data Direction Register B)
 
-; --------
-;  Others
-; --------
+; -------------
+;  Others/Misc
+; -------------
 MSC_SIDRNG = $D41B

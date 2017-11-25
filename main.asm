@@ -30,11 +30,27 @@ MEM_TEXT_ADRSTATUS = $3194
 ;6->0 ???
 MASK_TEXT_ADR_ISHEQL = %10000000
 
+MEM_PWD_LENGTH = $31F0
+MEM_PWD_AMOUNT = $31F1
+
+; Pointer to the start of the section with
+;  the password with the required length
+MEM_PWD_DATA_PTRL = $31F2
+MEM_PWD_DATA_PTRH = $31F3
+
+; Direct pointer to the solution word
+MEM_PWD_SOLUTION_PTRL = $31F4
+MEM_PWD_SOLUTION_PTRH = $31F5
+
+; Data structure: (Temporary)
+;  * n*2 bytes
+;    * Pointers to word in Data zone.
+;  * $00*2
+MEM_PWD_DATA = $31F6
 
 ;CONTS_PRINTERTIMER = #04
 ;MEM_SETTINGS = $3191
 ;MASK_DIFFICULTY
-
 
 * = $1000
 
@@ -46,7 +62,7 @@ init
 	sta SCR_BKGND
 	
 init_screen
-	; Preparing cursor
+	; Preparing cursor (Doesn't work as intended)
 	;lda #$02
 	;sta SCR_CURSOR_X
 	;lda #$10
@@ -54,22 +70,10 @@ init_screen
 	;lda #$00
 	;sta SCR_CURSOR_STATE
 	
-	; Preparing values for init_screen_loop
-	ldx #$00
-init_screen_loop
-	; Clear characters and set characters foreground to green
+	; Preparing values for util_clear_screen
 	lda #$20
-	sta $0400,x
-	sta $0500,x
-	sta $0600,x
-	sta $06e8,x
-	lda #$05
-	sta $d800,x
-	sta $d900,x
-	sta $da00,x
-	sta $dae8,x
-	inx
-	bne init_screen_loop
+	ldy #$05
+	jsr Utils.clear_screen
 
 ; This part is not nescessary since this area will be overwritten later. 
 init_memory
@@ -118,11 +122,43 @@ generate
 .gen_adr_end
 	sta MEM_TEXT_ADRL
 
-.tmp01
-	; Selecting words (do settings too)
+.gen_screen_bckgnd
+	ldx #$00
+.gen_screen_bckgnd_loop
+	jsr Utils.get_filler
+	sta MEM_CHARSLOW, x
+	jsr Utils.get_filler
+	sta MEM_CHARSHIGH, x
+	inx
+	cpx #$C0
+	bne .gen_screen_bckgnd_loop
+
+.gen_words
+	; The amount and length will be hard coded for
+	;  the moment, they will be random later.
+	lda #$04
+	sta MEM_PWD_LENGTH
+	lda #$06
+	sta MEM_PWD_AMOUNT
 	
+.gen_words_count
+	; Init
+	
+.gen_words_count_loop
+	; tmp
+	
+
+.gen_unk
+	jmp render
+	; Selecting words (do settings too)
+
+
 	
 !zone Rendering
+render
+	nop
+; A lot of these "functions"/"subroutines"
+;  will be moved in the Utils zone later.
 print_all
 	; Reseting X for the second timer
 	ldx #$00
@@ -248,33 +284,25 @@ quit
 	lda #$06
 	sta SCR_BKGND
 	
-	; Preparing values for .screen
+	; Preparing values for util_clear_screen
 	ldx #$00
-	
-reset_screen
 	lda #$20
-	sta $0400,x
-	sta $0500,x
-	sta $0600,x
-	sta $06e8,x
-	lda #$0E    ; Set foreground to black(00)/white(01)/blue(14) in Color Ram 
-	sta $d800,x
-	sta $d900,x
-	sta $da00,x
-	sta $dae8,x
-	inx
-	bne reset_screen
+	ldy #$0E
+	jsr Utils.clear_screen
 	
-	rts ; Return to basic
+	; Return to basic
+	rts 
 
 
 !zone Utils
-rngSetup ; Use $D41B to get the random nbr
-	lda #$FF
-	sta $D40E
-	sta $D40F
-	lda #$80
-	sta $D412
+!source "utils.asm"
+; TODO: Add text printer stuff here
+
+.get_filler
+	lda MSC_SIDRNG
+	and fillers_mask
+	cmp fillers_max
+	bcs .get_filler
 	rts
 
 !zone Data
