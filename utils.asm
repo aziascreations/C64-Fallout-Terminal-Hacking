@@ -1,4 +1,4 @@
-rngSetup ; Use $D41B to get the random nbr
+.rngSetup ; Use $D41B to get the random nbr
 	lda #$FF
 	sta $D40E
 	sta $D40F

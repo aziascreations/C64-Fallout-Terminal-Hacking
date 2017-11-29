@@ -42,11 +42,23 @@ MEM_PWD_DATA_PTRH = $31F3
 MEM_PWD_SOLUTION_PTRL = $31F4
 MEM_PWD_SOLUTION_PTRH = $31F5
 
+; Temporary working value
+; Amount of words of the designated length
+MEM_PWD_WORDS_AMOUNT = $31F6
+; Only used in Utils.nth word thingy
+MEM_PWD_WORDS_NUMBER = $31F7
+MEM_PWD_TEMP = $31F8
+
+MEM_PRINTER_SETTINGS = $31F9
+MASK_PRINTER_SETTINGS_INSTANT = %00000001
+
 ; Data structure: (Temporary)
 ;  * n*2 bytes
 ;    * Pointers to word in Data zone.
+;  * 1 byte | 0-On left side 1-255-On right side
+;  * 1 byte | start position on the respective side.
 ;  * $00*2
-MEM_PWD_DATA = $31F6
+MEM_PWD_DATA = $31FA
 
 ;CONTS_PRINTERTIMER = #04
 ;MEM_SETTINGS = $3191
@@ -91,7 +103,7 @@ init_memory_loop
 !zone Generate
 generate
 	; Prepare the SID for later
-	jsr rngSetup
+	jsr Utils.rngSetup
 	
 	; See http://www.6502.org/tutorials/compare_beyond.html
 	; Values Reset
@@ -140,136 +152,244 @@ generate
 	sta MEM_PWD_LENGTH
 	lda #$06
 	sta MEM_PWD_AMOUNT
-	
+
+; This whole block searches for the start of the section that holds the passwords
+;  with the corresponding size in Data.passwords and saves the pointer
+.gen_words_search
+	lda #<passwords
+	sta ZP_ADR_IN_LOW
+	lda #>passwords
+	sta ZP_ADR_IN_HIGH
+	ldy #$00
+.gen_words_search_loop
+	lda (ZP_ADR_IN_LOW), y
+	beq .gen_words_search_check
+	iny
+	jmp .gen_words_search_loop
+.gen_words_search_check
+	cpy MEM_PWD_LENGTH
+	beq .gen_words_search_end
+	iny
+	lda (ZP_ADR_IN_LOW), y
+	bne .gen_words_search_updateptr
+	iny
+.gen_words_search_updateptr
+	clc
+	tya
+	adc ZP_ADR_IN_LOW
+	sta ZP_ADR_IN_LOW
+	bcc .gen_words_search_updateptr_end
+	inc ZP_ADR_IN_HIGH
+.gen_words_search_updateptr_end
+	ldy #$00
+	jmp .gen_words_search_loop
+.gen_words_search_end
+	lda ZP_ADR_IN_LOW
+	sta MEM_PWD_DATA_PTRL
+	lda ZP_ADR_IN_HIGH
+	sta MEM_PWD_DATA_PTRH
+
+; This whole block counts the amount of words of the given length that are available.
+; The saved value (MEM_PWD_WORDS_AMOUNT) will be used in the next block (select).
 .gen_words_count
-	; Init
-	
+	; Pointer should already be set from the previous label.
+	ldy #$00
+	ldx #$00
 .gen_words_count_loop
-	; tmp
+	lda (ZP_ADR_IN_LOW), y
+	beq .gen_words_count_next
+	iny
+	jmp .gen_words_count_loop
+.gen_words_count_next
+	inx
+	iny
+	lda (ZP_ADR_IN_LOW), y
+	bne .gen_words_count_updateptr
+	jmp .gen_words_count_end
+.gen_words_count_updateptr
+	clc
+	tya
+	adc ZP_ADR_IN_LOW
+	sta ZP_ADR_IN_LOW
+	bcc .gen_words_count_updateptr_end
+	inc ZP_ADR_IN_HIGH
+.gen_words_count_updateptr_end
+	ldy #$00
+	jmp .gen_words_count_loop
+.gen_words_count_end
+	stx MEM_PWD_WORDS_AMOUNT
+	
+; Chooses the words to use and prepares the data section in memory (MEM_PWD_DATA)
+.gen_words_select
+	ldx #$00
+	stx ZP_TEMP1
+	;Clean data memory
+.gen_words_select_loop
+	lda MSC_SIDRNG
+	cmp MEM_PWD_WORDS_AMOUNT
+	bcs .gen_words_select_loop
+	
+	tay
+	jsr Utils.get_nth_word
+	; Do something with the pointer and check for duplicates
+	
+	inc ZP_TEMP1
+	lda ZP_TEMP1
+	cmp MEM_PWD_AMOUNT
+	bcc .gen_words_select_loop
+	
+; Sets the position of words on the screen.
+.gen_words_position
+	;.
 	
 
 .gen_unk
+	nop
 	jmp render
 	; Selecting words (do settings too)
 
 
 	
 !zone Rendering
+
 render
 	nop
-; A lot of these "functions"/"subroutines"
-;  will be moved in the Utils zone later.
 print_all
-	; Reseting X for the second timer
-	ldx #$00
-	ldy #$00
+	; A lot of these "functions"/"subroutines"
+	;  will be moved in the Utils zone later.
 	
-	; Setting up Input pointers
-	; Starting with title
-	lda #<txt_test
+	; The ZP_ADR_TMP_* will be used to keep the original start of
+	;  the printer to be able to change lines easily.
+	
+	; Loading Title pointer to pointer in
+	lda #<titles
 	sta ZP_ADR_IN_LOW
-	lda #>txt_test
+	sta ZP_ADR_TMP_LOW
+	lda #>titles
 	sta ZP_ADR_IN_HIGH
+	sta ZP_ADR_TMP_HIGH
 	
 	; Setting up Output pointers
-	; 
-	TMPVAR01 = $0400
-	lda #<TMPVAR01
+	SCR_LINE1 = $0400
+	lda #<SCR_LINE1
 	sta ZP_ADR_OUT_LOW
-	lda #>TMPVAR01
+	lda #>SCR_LINE1
 	sta ZP_ADR_OUT_HIGH
 	
-.main
-	lda #$fb
-.main_wait_raster
-	cmp $d012
-	bne .main_wait_raster
-	
-	inc ZP_TIMER
-	lda ZP_TIMER
-	cmp #$32
-	bne .main_skip1
-	
-	lda #$00
-	sta ZP_TIMER
-	
-	; CODE (Executed every second)
-.main_skip1
-	lda $d012
-.main_wait_next_raster
-	cmp $d012
-	beq .main_wait_next_raster
-	
-	; CODE START (Executed every frame)
-	; Text printer timer loop
-	inx
-	cpx #$04 ;Originally #$04
-	bne .main
-	
-	; Starting to print stuff
+	; Reseting X for the second timer
+	; Now done in the subroutine
+	;ldx #$00
 	;ldy #$00
-	lda (ZP_ADR_IN_LOW), y
 	
-	; Checking for a null terminator byte
-	beq .nt_main
+	; Starting to print the title
+	jsr Utils.printer_init
 	
-	sta (ZP_ADR_OUT_LOW), y
-	
-	;inc ZP_ADR_IN_LOW
-	;inc ZP_ADR_OUT_LOW
-	
-	; Preparing value for next loops
-	ldx #$00
-	iny
-	jmp .main
-
-.nt_main
-	lda MEM_PRINTERSTATUS
-	and #MASK_PRINTER_TITLEDONE
-	;bne .nt_subtitle
-
-.nt_title
-	lda MEM_PRINTERSTATUS
-	ora #MASK_PRINTER_TITLEDONE
-	sta MEM_PRINTERSTATUS
-	
-	; TODO: Use the subtitle selector subroutine here
-	; Changing text address to subtitle
-	lda #<txt_subtitle
-	sta ZP_ADR_IN_LOW
-	lda #>txt_subtitle
-	sta ZP_ADR_IN_HIGH
-	
-	;clc
-	;lda ZP_ADR_OUT_LOW
-	;adc #$28
+	rts
+	; If you want to force the subtitle on the second line, uncomment
+	;  the following block of code.
+	; Just note that it will overwrite anything that is on this line.
+	;SCR_LINE2 = $0428
+	;lda #$00
 	;sta ZP_ADR_OUT_LOW
-    ;bcc .nt_end
-	;
-	;;inc SCR_FRAME
-	;inc ZP_ADR_OUT_HIGH
-	jsr .nt_nextline
-	
-	jmp .nt_end
+	;lda #$00
+	;sta ZP_ADR_OUT_HIGH
 
-.nt_subtitle
-	rts
-	jmp .nt_end
 	
-.nt_end
-	ldx #$00
-	ldy #$00
-	jmp .main
+; Old printing loop code
+; You still have to copy the .nt_* parts above to change the text and
+;  change stuff for the special characters
 
-.nt_nextline
-	clc
-	lda ZP_ADR_OUT_LOW
-	adc #$28
-	sta ZP_ADR_OUT_LOW
-    bcc .nt_nextline_end
-	inc ZP_ADR_OUT_HIGH
-.nt_nextline_end
-	rts
+;.main
+;	lda #$fb
+;.main_wait_raster
+;	cmp $d012
+;	bne .main_wait_raster
+;	
+;	inc ZP_TIMER
+;	lda ZP_TIMER
+;	cmp #$32
+;	bne .main_skip1
+;	
+;	lda #$00
+;	sta ZP_TIMER
+;	
+;	; CODE (Executed every second)
+;.main_skip1
+;	lda $d012
+;.main_wait_next_raster
+;	cmp $d012
+;	beq .main_wait_next_raster
+;	
+;	; CODE START (Executed every frame)
+;	; Text printer timer loop
+;	inx
+;	cpx #$01 ;Originally #$04
+;	bne .main
+;	
+;	; Starting to print stuff
+;	;ldy #$00
+;	lda (ZP_ADR_IN_LOW), y
+;	
+;	; Checking for a null terminator byte
+;	beq .nt_main
+;	
+;	sta (ZP_ADR_OUT_LOW), y
+;	
+;	;inc ZP_ADR_IN_LOW
+;	;inc ZP_ADR_OUT_LOW
+;	
+;	; Preparing value for next loops
+;	ldx #$00
+;	iny
+;	jmp .main
+;
+;.nt_main
+;	lda MEM_PRINTERSTATUS
+;	and #MASK_PRINTER_TITLEDONE
+;	;bne .nt_subtitle
+;
+;.nt_title
+;	lda MEM_PRINTERSTATUS
+;	ora #MASK_PRINTER_TITLEDONE
+;	sta MEM_PRINTERSTATUS
+;	
+;	; TODO: Use the subtitle selector subroutine here
+;	; Changing text address to subtitle
+;	lda #<txt_subtitle
+;	sta ZP_ADR_IN_LOW
+;	lda #>txt_subtitle
+;	sta ZP_ADR_IN_HIGH
+;	
+;	;clc
+;	;lda ZP_ADR_OUT_LOW
+;	;adc #$28
+;	;sta ZP_ADR_OUT_LOW
+;    ;bcc .nt_end
+;	;
+;	;;inc SCR_FRAME
+;	;inc ZP_ADR_OUT_HIGH
+;	jsr .nt_nextline
+;	
+;	jmp .nt_end
+;
+;.nt_subtitle
+;	rts
+;	jmp .nt_end
+;	
+;.nt_end
+;	ldx #$00
+;	ldy #$00
+;	jmp .main
+;
+;.nt_nextline
+;	clc
+;	lda ZP_ADR_OUT_LOW
+;	adc #$28
+;	sta ZP_ADR_OUT_LOW
+;    bcc .nt_nextline_end
+;	inc ZP_ADR_OUT_HIGH
+;.nt_nextline_end
+;	rts
 
 !zone Core
 .main
@@ -298,11 +418,97 @@ quit
 !source "utils.asm"
 ; TODO: Add text printer stuff here
 
+; --------------------
 .get_filler
 	lda MSC_SIDRNG
 	and fillers_mask
 	cmp fillers_max
 	bcs .get_filler
+	rts
+
+; --------------------
+; Y is the nth number
+.get_nth_word
+	lda MEM_PWD_DATA_PTRL
+	sta ZP_ADR_IN_LOW
+	lda MEM_PWD_DATA_PTRH
+	sta ZP_ADR_IN_HIGH
+	sty MEM_PWD_WORDS_NUMBER
+	ldy #$00
+	ldx #$00
+.get_nth_word_loop
+	lda (ZP_ADR_IN_LOW), y
+	beq .get_nth_word_next
+	iny
+	jmp .get_nth_word_loop
+.get_nth_word_next
+	cpx MEM_PWD_WORDS_NUMBER
+	bne .get_nth_word_updateptr
+	jmp .get_nth_word_end
+.get_nth_word_updateptr
+	inx
+	iny
+	clc
+	tya
+	adc ZP_ADR_IN_LOW
+	sta ZP_ADR_IN_LOW
+	bcc .get_nth_word_updateptr_end
+	inc ZP_ADR_IN_HIGH
+.get_nth_word_updateptr_end
+	ldy #$00
+	jmp .get_nth_word_loop
+.get_nth_word_end
+	rts
+
+; --------------------
+.printer_init
+	ldx #$00
+	ldy #$00
+.printer
+	lda #$fb
+.printer_wait_raster
+	cmp $d012
+	bne .printer_wait_raster
+	
+	inc ZP_TIMER
+	lda ZP_TIMER
+	cmp #$32
+	bne .printer_skip1
+	
+	lda #$00
+	sta ZP_TIMER
+	
+	; CODE (Executed every second)
+.printer_skip1
+	lda $d012
+.printer_wait_next_raster
+	cmp $d012
+	beq .printer_wait_next_raster
+	
+	; CODE START (Executed every frame)
+	; Text printer timer loop
+	inx
+	cpx #$01 ; Text printing speed: Originally #$04
+	bne .printer
+	
+	; Starting to print stuff
+	;ldy #$00
+	lda (ZP_ADR_IN_LOW), y
+	
+	; Checking for a null terminator byte
+	beq .nt_main
+	
+	sta (ZP_ADR_OUT_LOW), y
+	
+	;inc ZP_ADR_IN_LOW
+	;inc ZP_ADR_OUT_LOW
+	
+	; Preparing value for next loops
+	ldx #$00
+	iny
+	jmp .printer
+
+.nt_main
 	rts
 
 !zone Data

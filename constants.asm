@@ -8,9 +8,11 @@ ZP_TIMER = $02 ; Main loop timer
 ZP_UNK1 = $2A
 ZP_ALT_TIMER = $2A
 
-ZP_UNK2 = $52
-ZP_UNK3 = $B0
-ZP_UNK4 = $B1
+ZP_TEMP1 = $52
+
+ZP_ADR_TMP_LOW = $B0
+ZP_ADR_TMP_HIGH = $B1
+
 ZP_UNK5 = $BF
 
 ZP_ADR_IN_LOW = $FB

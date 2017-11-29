@@ -11,5 +11,8 @@
 ## Uses
 For [epic hacking scenes](https://www.youtube.com/watch?v=R7xjeb7s9uo).
 
+## Warnings
+Illegal opcodes used: lax (direct)
+
 ## LICENSE
 To be determined...
